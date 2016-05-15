@@ -11,6 +11,7 @@ that intersection.
 from __future__ import print_function
 from nltk.classify import PositiveNaiveBayesClassifier
 import csv
+import re
 import os
 import nltk
 import itertools
@@ -29,14 +30,40 @@ def split_text(filename):
     return sentences
 
 
+def create_word_emotion_map(filename):
+    i = 0
+    w_e_map = {}
+    # format: aback \t anger \t 0
+    with open(filename, 'rU') as f:
+        rows = csv.reader(f, delimiter='\t')
+        for target_word, category, association in rows:
+            word = {'word': target_word.decode('utf-8').lower(),
+                    'category': category,
+                    'association': association}
+            w_e_map[i] = word
+            i += 1
+    return w_e_map
+
+
+def extract_words_for_emotions(emotions, w_e_map):
+    w_e_list = []
+    for emotion in emotions:
+        for v in w_e_map.itervalues():
+            if emotion == v['category'] and v['association'] != '0':
+                w_e_list.append(v['word'])
+    return w_e_list
+
+
 def features(sentence):
     words = sentence.lower().split()
     return dict(('contains(%s)' % w, True) for w in words)
 
 
-def write_poems(train_file, compare_file, poems):
-    filename = 'Poems_of_' + os.path.basename(
-        train_file) + '_ala_' + os.path.basename(compare_file) + '_' + str(
+def write_poems(emotions, train_file, compare_file, poems):
+    filename = 'Poems_of_' + "_".join(emotions) + '_by_' + os.path.splitext(
+        os.path.basename(train_file))[0] + '_ala_' + \
+               os.path.splitext(os.path.basename(compare_file))[
+                   0] + '_' + str(
         datetime.now().strftime("%Y-%m-%d %H-%M-%S")) + '.txt'
     with open(filename, "wb") as f:
         for poem in poems:
@@ -56,7 +83,7 @@ if __name__ == "__main__":
     # this parameter is set to false so that the most recent model file will be
     # loaded and used- if the model has not been trained, set it to true to
     # start the training
-    enable_training = True
+    enable_training = False
 
     # create a csv file of the first author's novels stripped of anything
     # not part of the text
@@ -69,6 +96,12 @@ if __name__ == "__main__":
     # either the most recently trained file or use none to start a new training
     model_file = 'data/rnn-austen-80-8000-2016-04-19-14-09-39.npz'
 
+    # NRC Emotion Lexicon: http://www.saifmohammad.com/WebPages/lexicons.html
+    word_emolex = 'data/NRC-emotion-lexicon-wordlevel-alphabetized-v0.92.txt'
+
+    # list of emotions to use as a filter for the poems generated
+    emotions = ['anger', 'sadness']
+
     # the number of sentences the model should generate and use to select haiku
     # worthy lines
     num_sentences = 1000
@@ -79,6 +112,18 @@ if __name__ == "__main__":
                         enable_training, model_file, train_file, num_sentences)
     poems = generate.poems
 
+    print("Creating word to emotion map...")
+    w_e_map = create_word_emotion_map(word_emolex)
+    specific_word_emo_list = extract_words_for_emotions(emotions, w_e_map)
+
+    print("Filtering through specific emotions...")
+    filtered_emotion_poem_list = []
+    for word in specific_word_emo_list:
+        for poem in poems:
+            if re.search(word, poem):
+                filtered_emotion_poem_list.append(poem)
+                poems.remove(poem)
+
     # train the classifier to distinguish between the different writing styles
     print("Training classifier...")
     first_author_sentences = split_text(train_file)
@@ -88,11 +133,13 @@ if __name__ == "__main__":
     classifier = PositiveNaiveBayesClassifier.train(positive_featuresets,
                                                     unlabeled_featuresets)
 
-    filtered_poem_list = []
-    for poem in poems:
+    print("Filtering through specific influences...")
+    filtered_influences_poem_list = []
+    for poem in filtered_emotion_poem_list:
         if classifier.classify(features(poem)):
-            filtered_poem_list.append(poem)
+            filtered_influences_poem_list.append(poem)
 
     # write the filtered list of poems to a text file
     print("Writing poems to file...")
-    write_poems(train_file, compare_file, filtered_poem_list)
+    write_poems(emotions, train_file, compare_file,
+                filtered_influences_poem_list)

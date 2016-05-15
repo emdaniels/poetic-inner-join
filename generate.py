@@ -12,7 +12,6 @@ import string
 
 
 class Generate(object):
-
     def __init__(self, vocabulary_size, hidden_dim, learning_rate, nepoch,
                  enable_training, model_file, train_file, num_sentences):
         self.vocabulary_size = vocabulary_size
@@ -95,7 +94,8 @@ class Generate(object):
             if len(self.first) != 0 and len(self.second) != 0 \
                     and len(self.third) != 0:
                 self.poems.append(
-                    self.first + "\n" + self.second + "\n" + self.third + "\n")
+                    self.first + " \n " + self.second + " \n " +
+                    self.third + " \n ")
                 self.first = ""
                 self.second = ""
                 self.third = ""
